@@ -10,6 +10,16 @@ HEIF/RAW libraries from Ubuntu. It uses the upstream CMake option to disable KDE
 Frameworks 6. No kernel changes are required. Background removal using optional
 ONNX Runtime is unavailable unless that library is supplied.
 
+### Ubuntu compiler compatibility setting
+
+The first ARM64 run failed at `KeyframesPanel.h:88`: Qt 6.4's `QPointer` comparison
+instantiated a cast to the incomplete forward-declared `CompSession` class.
+`compat.cmake` uses CMake's project-include hook to pass GCC `-include` for the
+existing upstream `src/ui/comp/CompSession.h` before C++ translation units. This
+supplies the complete definition without editing any upstream source file or
+disabling compiler diagnostics. The complete build configuration is archived
+alongside every result. This is a build workaround, not an upstream source fix.
+
 ## Licence and source
 
 Upstream code is GPL-3.0-or-later. Upstream name/logo permissions are separately

@@ -35,7 +35,8 @@ jobs:
       - name: Configure
         run: |
           set -o pipefail
-          cmake -S source -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKK_USE_KF6=OFF 2>&1 | tee out/configure.log
+          cmake -S source -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKK_USE_KF6=OFF \
+            -DCMAKE_PROJECT_Kinoklip_INCLUDE="$GITHUB_WORKSPACE/compat.cmake" 2>&1 | tee out/configure.log
       - name: Compile application and selected upstream tests
         run: |
           set -o pipefail
@@ -59,7 +60,8 @@ jobs:
           printf '%s\n' 'Upstream: https://github.com/SeniorMatt/kinoklip' \
             'Version: v1.8.0' 'Source: 95a0580d0a4a4e900614d1bfeb5386ca2e3a589b' \
             "Build scripts: $GITHUB_SHA" "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            'Unmodified upstream source; unofficial native ARM64 test build.' > out/provenance.txt
+            'Unmodified upstream source; unofficial native ARM64 test build.' \
+            'Compiler pre-includes upstream CompSession.h via builder/compat.cmake; see BUILD-README.md.' > out/provenance.txt
           git -C source diff --exit-code
           cp out/provenance.txt out/runtime-libraries.txt package/doc/
           tar -C package -czf out/kinoklip-1.8.0-ubuntu24.04-arm64-test.tar.gz .
