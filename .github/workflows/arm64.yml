@@ -41,6 +41,11 @@ jobs:
         run: |
           set -o pipefail
           cmake --build build --parallel 3 --target kinoklip test_cli test_project test_probe test_export 2>&1 | tee out/build.log
+      - name: Generate upstream media fixtures before any test
+        run: |
+          set -o pipefail
+          bash source/scripts/make_test_media.sh "$GITHUB_WORKSPACE/source/tests/data/generated" 2>&1 | tee out/fixtures.log
+          test -s source/tests/data/generated/h264_25fps.mp4
       - name: Run CLI, project, media and export tests
         run: |
           set -o pipefail

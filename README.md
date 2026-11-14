@@ -39,6 +39,8 @@ Build scripts in this repository are licensed under GPL-3.0-or-later; see LICENS
 CLI, project, media probing and export tests run headlessly. Inspect test logs for
 skipped hardware-dependent cases. Passing them does not establish that Asahi/M1
 or Radeon graphics, video acceleration, multiple displays or suspend work.
+Upstream media fixtures are generated explicitly before the suite: the CLI
+round-trip test expects them to exist but does not generate them itself.
 Artifacts stay in draft releases until assessed. Compilation/test failures retain
 diagnostic results and must not be described as successful builds.
 
