@@ -1,0 +1,84 @@
+name: Kinoklip ARM64 test build
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install Ubuntu ARM64 build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config git python3 \
+            qt6-base-dev qt6-multimedia-dev qt6-svg-dev qt6-tools-dev qt6-tools-dev-tools \
+            qt6-l10n-tools libqt6opengl6-dev qt6-wayland \
+            libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libswresample-dev \
+            libavfilter-dev ffmpeg libheif-dev libraw-dev libwayland-dev libegl1-mesa-dev
+      - name: Fetch unchanged upstream source
+        run: |
+          mkdir -p out
+          git init source
+          git -C source remote add origin https://github.com/SeniorMatt/kinoklip.git
+          git -C source fetch --depth=1 origin 95a0580d0a4a4e900614d1bfeb5386ca2e3a589b
+          git -C source checkout --detach FETCH_HEAD
+          test "$(git -C source rev-parse HEAD)" = 95a0580d0a4a4e900614d1bfeb5386ca2e3a589b
+          test "$(uname -m)" = aarch64
+          git -C source archive --format=tar.gz --prefix=kinoklip-1.8.0-source/ HEAD > out/kinoklip-1.8.0-source.tar.gz
+          dpkg-query -W > out/build-packages.txt
+      - name: Configure
+        run: |
+          set -o pipefail
+          cmake -S source -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKK_USE_KF6=OFF 2>&1 | tee out/configure.log
+      - name: Compile application and selected upstream tests
+        run: |
+          set -o pipefail
+          cmake --build build --parallel 3 --target kinoklip test_cli test_project test_probe test_export 2>&1 | tee out/build.log
+      - name: Run CLI, project, media and export tests
+        run: |
+          set -o pipefail
+          QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure --timeout 300 -j1 -R '^test_(cli|project|probe|export)$' --output-junit "$GITHUB_WORKSPACE/out/tests.xml" 2>&1 | tee out/tests.log
+      - name: Package native test binary, licensing and provenance
+        if: ${{ !cancelled() && hashFiles('build/kinoklip') != '' }}
+        run: |
+          set -euo pipefail
+          mkdir -p package/bin package/doc
+          cp build/kinoklip package/bin/
+          cp source/license.md source/logo-license.md source/attribution.md package/doc/
+          cp README.md package/doc/BUILD-README.md
+          file build/kinoklip | tee out/binary-info.txt
+          readelf -h build/kinoklip >> out/binary-info.txt
+          ldd build/kinoklip | tee out/runtime-libraries.txt
+          if grep -q 'not found' out/runtime-libraries.txt; then exit 1; fi
+          printf '%s\n' 'Upstream: https://github.com/SeniorMatt/kinoklip' \
+            'Version: v1.8.0' 'Source: 95a0580d0a4a4e900614d1bfeb5386ca2e3a589b' \
+            "Build scripts: $GITHUB_SHA" "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            'Unmodified upstream source; unofficial native ARM64 test build.' > out/provenance.txt
+          git -C source diff --exit-code
+          cp out/provenance.txt out/runtime-libraries.txt package/doc/
+          tar -C package -czf out/kinoklip-1.8.0-ubuntu24.04-arm64-test.tar.gz .
+      - name: Save results to draft release even if compilation or tests fail
+        if: ${{ always() && !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          git archive --format=tar.gz --prefix=builder/ HEAD > out/build-scripts.tar.gz
+          if [ -d build/Testing ]; then cp -r build/Testing out/ctest-details; fi
+          tar -czf diagnostics.tar.gz out
+          mv diagnostics.tar.gz out/
+          (cd out && sha256sum *.tar.gz > SHA256SUMS.txt)
+          tag="arm64-test-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          printf '%s\n' 'Unofficial build of unchanged Kinoklip 1.8.0 for Ubuntu 24.04 ARM64.' \
+            'Check the workflow result and tests.log: asset availability does not mean tests passed.' \
+            'No Asahi GPU or Radeon hardware validation has been performed.' \
+            'Exact upstream source and build scripts are included next to the test binary.' \
+            'Dependencies are supplied by Ubuntu and are not bundled.' > release-notes.txt
+          gh release create "$tag" --draft --title "ARM64 test $GITHUB_RUN_ID (attempt $GITHUB_RUN_ATTEMPT)" --notes-file release-notes.txt out/*.tar.gz out/*.txt
